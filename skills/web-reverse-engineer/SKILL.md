@@ -7,7 +7,7 @@ description: |
   即使用户只是给了一个URL说"帮我看看这个网站"，也应触发此技能并主动进行源码逆向分析。
 ---
 
-# 网站源码逆向分析技能
+# 网站理解与操作技能
 
 ## 核心目标
 
@@ -72,7 +72,6 @@ with urllib.request.urlopen(req, context=ctx, timeout=15) as resp:
 | 协议相对路径 | `//api.example.com/...` | 补 `https:` |
 | 绝对路径 | `/x/web-interface/nav` | 拼接域名 |
 | 完整 URL | `https://api.example.com/...` | 直接用 |
-| 相对路径 | `../chunks/xxx.js` | 用 `urljoin` 拼接 |
 
 ### 陷阱4：HTTP 方法和路径在 JS 中是分离的
 
@@ -83,144 +82,83 @@ re.findall(r'method:\s*["\']( GET|POST|PUT|DELETE|PATCH)["\'].*?url:\s*["\']([^"
 
 ### 陷阱5：主入口 JS 不是全部
 
-现代前端（Vite/Webpack）做代码分割，业务逻辑在 chunk 文件。**脚本已自动递归抓取 chunk 文件**。
-
-### 陷阱6：SPA 空壳页面
-
-纯 CSR 应用首屏 HTML 几乎无内容，只有 `<div id="app">`。此时需要：
-- 重点分析 JS 路由配置
-- 检查 Service Worker 缓存策略
-- 必要时用浏览器自动化获取渲染后内容
-
-### 陷阱7：429 限流
-
-批量抓取时容易触发限流。脚本已内置重试和延迟机制。若仍被限流：
-- 减小 `MAX_WORKERS`（默认5）
-- 增大 `REQUEST_INTERVAL`（默认0.2s）
-- 添加更真实的请求头
-
-### 陷阱8：有些站点需要鉴权
-
-有些站点需要登录后才能访问，直接抓取会返回空页面或登录页。
-
-**正确做法**：使用 `--cookie` 参数传入登录 Cookie：
-
-```bash
-python temp-scripts/web_fetch_source.py https://internal.example.com/ output_dir \
-  --cookie "sid=xxx; token=yyy; user=zzz"
-```
-
-### 陷阱9：CDN 域名与页面域名不同
-
-很多站点的静态资源在独立 CDN 域名上（如页面 `app.example.com`，JS 在 `static.cdn.example.com`）。脚本已自动处理：chunk URL 与来源 JS 同域即可放行。
+现代前端（Vite/Webpack）做代码分割，业务逻辑在 chunk 文件。
+需要在主 JS 中搜索 chunk 引用，按需抓取。
 
 ---
 
 ## 分析模式：源码获取与理解
 
-### 步骤一：一键抓取
+### 步骤一：抓取原始 HTML
 
-**使用 `scripts/web_fetch_source.py`（一键完成）**：
+**使用 `scripts/web_fetch_source.py`（一键完成）**，或手动：
 
 ```bash
-# 无鉴权站点
 python temp-scripts/web_fetch_source.py https://目标网站.com/ output_dir
-
-# 需要鉴权的站点
-python temp-scripts/web_fetch_source.py https://example.com/ output_dir \
-  --cookie "sid=xxx; token=yyy"
-
-# 额外请求头
-python temp-scripts/web_fetch_source.py https://目标网站.com/ output_dir \
-  --header "X-Custom-Header: value"
-
-# 调整并行数
-python temp-scripts/web_fetch_source.py https://目标网站.com/ output_dir --workers 3
 ```
 
-**命令行参数**：
-
-| 参数 | 说明 | 默认值 |
-|------|------|--------|
-| `url` | 目标网站URL | 必填 |
-| `output_dir` | 输出目录 | `web_analysis` |
-| `--cookie, -c` | Cookie字符串 | 无 |
-| `--header, -H` | 额外请求头（可多次） | 无 |
-| `--workers, -w` | 并行线程数 | 5 |
-
-脚本自动完成：
-1. 抓 HTML → 解析结构 → 识别技术栈
-2. 提取 JS 列表 → **并行抓取**（5线程）→ 自动下载 Source Map
-3. **自动递归抓取 chunk 文件**（最多2层深度，100个文件上限）
-4. 分析内联脚本
-5. 提取 API 端点、鉴权信息、前端路由、WebSocket 端点
-6. 去重汇总 → 保存分析报告
-
-**关键配置**（在脚本顶部可修改）：
-| 参数 | 默认值 | 说明 |
-|------|--------|------|
-| `MAX_WORKERS` | 5 | 并行抓取线程数 |
-| `REQUEST_TIMEOUT` | 20 | 单个请求超时(秒) |
-| `MAX_RETRIES` | 2 | 失败重试次数 |
-| `MAX_CHUNK_DEPTH` | 2 | chunk递归深度 |
-| `MAX_TOTAL_JS` | 100 | JS文件总数上限 |
+脚本自动完成：抓 HTML → 提取 JS 列表 → 批量抓取 JS → 提取 API 端点 → 保存分析报告。
 
 ### 步骤二：识别技术栈
 
-脚本自动识别，判断策略：
+从 HTML 快速判断，决定后续分析策略：
 
 | 特征 | 技术栈 | 影响 |
 |------|--------|------|
 | `__NEXT_DATA__` | Next.js | 内联 JSON 含首屏数据和路由 |
 | `__NUXT__` / `__INITIAL_STATE__` | Nuxt / Vue SSR | 内联状态有用户数据 |
-| `window.__pinia__` | Pinia | 内联状态树可直接解析 |
-| `ng-app` / `ng-version` | Angular | 模块化强，接口在 service 中 |
-| `vite` | Vite | chunk 命名规则不同 |
-| `graphql` / `__typename` | GraphQL | 需用 gql_analyzer 深度分析 |
-| `sourceMappingURL` | 有 Source Map | **已自动下载**，可拿未混淆源码 |
-| `new WebSocket` | WebSocket | 有实时通信，需分析 WS 鉴权 |
-| `serviceWorker.register` | Service Worker | 可能暴露缓存策略和离线 API |
+| `window.__pinia` | Pinia | 内联状态树可直接解析 |
+| `twirp/` 路径 | gRPC-Web | 全部 POST，请求体是 JSON |
+| `graphql` / `__typename` | GraphQL | 操作名即功能，单端点多查询 |
+| `sourceMappingURL` | 有 Source Map | **优先获取**，可拿未混淆源码 |
 
-### 步骤三：深度鉴权分析
+### 步骤三：提取接口
 
-**使用 `scripts/auth_analyzer.py`**：
+对每个 JS 文件批量正则搜索（优先级从高到低）：
+
+```python
+# 1. 最信息量：带方法的对象格式
+method_url = re.findall(
+    r'method:\s*["\']( GET|POST|PUT|DELETE|PATCH)["\'].*?url:\s*["\']([^"\']+)["\']',
+    content
+)
+
+# 2. 常见路径前缀
+apis = re.findall(r'["\'`](/(?:api|x|v[0-9]+|pgc|graphql)/[a-zA-Z0-9_/.-]+)["\'`]', content)
+
+# 3. 完整域名 URL
+full_urls = re.findall(r'(https?://api\.[a-z0-9.-]+/[a-zA-Z0-9_/.-]+)', content)
+
+# 4. baseURL 变量
+base = re.findall(r'(?:baseUrl|baseURL|API_URL)\s*[:=]\s*["\']([^"\']+)["\']', content)
+```
+
+**去重**：以 `{method}:{path}` 为 key 去重，过滤静态资源后缀（`.js/.css/.png`等）。
+
+### 步骤四：理解鉴权
+
+**使用 `scripts/auth_analyzer.py`，或手动搜索。**
 
 ```bash
 python temp-scripts/auth_analyzer.py output_dir/js/ auth_report.json
 ```
 
-自动提取：
-- Cookie 操作（读/写/工具函数）
-- CSRF 机制（header/cookie/字段）
-- Token 流程（获取/存储/传递/刷新/过期）
-- 请求拦截器（axios/fetch 包装/头注入）
-- 签名算法（MD5/SHA256/HMAC/AES/参数排序签名）
-- **参数签名机制**（WBI 等特化签名、打乱数组）
-- OAuth/OIDC 流程
-- **JWT 解码**（自动 base64 解码 payload，列出字段）
-- **URL 中的 API Key 检测**
-- **WebSocket 鉴权**
-- API 基础 URL（含 Vite/Next.js 环境变量）
+重点关注：
 
-### 步骤四：GraphQL 深度分析（检测到 GraphQL 时）
+| 搜索关键词 | 目的 |
+|-----------|------|
+| `interceptors.request.use` | 找请求拦截器，看统一加了什么头 |
+| `localStorage.setItem` / `sessionStorage` | 找 Token 存储位置 |
+| `csrf` / `bili_jct` / `X-CSRF` | 找 CSRF 机制 |
+| `Authorization` / `Bearer` | 找 Bearer Token 方式 |
+| `w_rid` / `wts` / `mixin_key` | 找 WBI 类签名机制 |
+| `withCredentials: true` | 确认 Cookie 跨域携带 |
 
-**使用 `scripts/gql_analyzer.py`**：
-
-```bash
-# 从JS源码提取操作定义
-python temp-scripts/gql_analyzer.py output_dir/js/ gql_report.json
-
-# 尝试 Introspection 查询（获取完整 schema）
-python temp-scripts/gql_analyzer.py --introspect https://api.example.com/graphql schema.json
-```
-
-自动提取：
-- GraphQL 端点 URL
-- 操作定义（query/mutation/subscription + 名称 + 字段）
-- Fragment 定义
-- `__typename` 类型推断
-- 客户端配置（Apollo/URQL/Relay）
-- 持久化查询（APQ）
+**WBI 签名模式**（B站等网站使用的参数签名，遇到时逆向）：
+1. 从导航接口拿 `img_key` + `sub_key`
+2. 按打乱数组重排拼接取前32位得 `mixin_key`
+3. 参数按 key 字母序排序拼接，过滤 `!'()*`
+4. `w_rid = MD5(querystring + mixin_key)`，`wts = 秒级时间戳`
 
 ### 步骤五：产出文档
 
@@ -244,19 +182,17 @@ python temp-scripts/gql_analyzer.py --introspect https://api.example.com/graphql
 ```python
 import urllib.request, urllib.parse, ssl, json
 
-def api_request(method, base_url, path, params=None, data=None, cookies='', extra_headers=None):
-    url = base_url + path
+def bilibili_request(method, path, params=None, data=None, cookies=''):
+    base = 'https://api.bilibili.com'
+    url = base + path
     if params:
         url += '?' + urllib.parse.urlencode(params)
 
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         'Cookie': cookies,
-        'Referer': base_url,
-        'Accept-Encoding': 'identity',
+        'Referer': 'https://www.bilibili.com/',
     }
-    if extra_headers:
-        headers.update(extra_headers)
 
     body = None
     if data:
@@ -268,46 +204,34 @@ def api_request(method, base_url, path, params=None, data=None, cookies='', extr
     ctx.verify_mode = ssl.CERT_NONE
 
     req = urllib.request.Request(url, data=body, headers=headers, method=method)
-    with urllib.request.urlopen(req, context=ctx, timeout=20) as resp:
+    with urllib.request.urlopen(req, context=ctx) as resp:
         return json.loads(resp.read().decode())
 ```
 
 **Bearer Token 鉴权**
-```python
-headers = {
-    'Authorization': f'Bearer {token}',
-    'Content-Type': 'application/json',
-}
+```bash
+curl -X GET "https://api.example.com/api/xxx" \
+  -H "Authorization: Bearer {token}" \
+  -H "Content-Type: application/json"
 ```
 
-**GraphQL 请求**
+**需要 WBI 签名**
 ```python
-import json
+import hashlib, time, re, urllib.parse
 
-def gql_request(endpoint, query, variables=None, headers=None):
-    body = json.dumps({'query': query, 'variables': variables or {}})
-    req = urllib.request.Request(
-        endpoint,
-        data=body.encode(),
-        headers={**headers, 'Content-Type': 'application/json'}
+def wbi_sign(params: dict, img_key: str, sub_key: str) -> dict:
+    tab = [46,47,18,2,53,8,23,32,15,50,10,31,58,3,45,35,
+           27,43,5,49,33,9,42,19,29,28,14,39,12,38,41,13,
+           37,48,7,16,24,55,40,61,26,17,0,1,60,51,30,4,
+           22,25,54,21,56,59,6,63,57,62,11,36,20,34,44,52]
+    orig = img_key + sub_key
+    mixin_key = ''.join(orig[i] for i in tab if i < len(orig))[:32]
+    params['wts'] = str(int(time.time()))
+    query = '&'.join(
+        f'{k}={re.sub(r"[!\'()*]", "", str(v))}'
+        for k, v in sorted(params.items())
     )
-    # ... 同上发送请求
-```
-
-**参数签名（通用模式）**
-
-很多网站使用"参数排序 + 拼接 + 密钥哈希"的签名方式：
-```python
-import hashlib, time
-
-def sign_params(params: dict, secret: str) -> dict:
-    """通用参数签名：按key排序拼接，加时间戳，HMAC-MD5签名"""
-    params['timestamp'] = str(int(time.time()))
-    # 按 key 字母序排序拼接
-    query = '&'.join(f'{k}={v}' for k, v in sorted(params.items()))
-    # 签名
-    sign = hashlib.md5((query + secret).encode()).hexdigest()
-    params['sign'] = sign
+    params['w_rid'] = hashlib.md5((query + mixin_key).encode()).hexdigest()
     return params
 ```
 
@@ -316,30 +240,28 @@ def sign_params(params: dict, secret: str) -> dict:
 有些操作需要先后调多个接口，按依赖顺序执行：
 
 ```
-示例（通用）：
-① GET /api/user/info       → 拿用户标识和签名密钥
-② 生成签名                 → 用 ① 的密钥签名
-③ GET /api/data/list       → 获取数据（带签名）
-④ POST /api/data/action    → 执行操作（需 CSRF Token）
+示例（B站）：
+① GET /x/web-interface/nav          → 拿 WBI keys（需 SESSDATA）
+② 生成 w_rid + wts                  → 用 ① 的 keys 签名
+③ GET /x/web-interface/wbi/search   → 搜索（带签名）
+④ POST /x/v2/history/toview/add     → 添加稍后再看（需 csrf=bili_jct）
 ```
 
 ---
 
 ## 产出文档说明
 
-分析结束后，产出 `{网站名}_report.md`在用户所调用本技能的项目的根目录里，包含：
+分析结束后，产出 `{网站名}_report.md`，包含：
 
 | 章节 | 内容 | 主要用途 |
 |------|------|----------|
 | 基本信息 | 技术栈、JS 文件、Source Map | 快速了解网站结构 |
-| 凭证说明 | 需要的凭证及获取方式 | 知道需要提供什么 |
-| **可直接执行的操作** | 操作清单 + 调用模板 | **核心交付，下次直接用** |
-| 鉴权与签名 | 凭证传递方式、签名机制 | 理解鉴权流程 |
-| 完整 API 接口清单 | 按模块分组的接口表 | 找到对应接口 |
-| GraphQL（如有） | 操作定义、端点、schema | GraphQL 专用 |
-| WebSocket（如有） | WS 端点、鉴权方式 | 实时通信 |
-| 页面功能地图 | 路径 → 功能映射 | 了解网站功能全貌 |
-| 附录 | JS 清单、域名体系、分析局限 | 补充信息 |
+| 鉴权流程 | 凭证清单、传递方式、签名机制 | 知道需要提供什么 |
+| API 接口清单 | 按模块分组的接口表 | 找到对应接口 |
+| 页面路由 | 路径 → 功能映射 | 了解网站功能全貌 |
+| 关键数据结构 | 重要接口的响应格式 | 解析返回数据 |
+| **可直接调用的操作** | 操作清单 + 调用模板 | **核心交付，下次直接用** |
+| 附录 | JS 清单、域名体系 | 补充信息 |
 
 报告模板在 `references/report_template.md`。
 
@@ -349,9 +271,8 @@ def sign_params(params: dict, secret: str) -> dict:
 
 | 脚本 | 用途 |
 |------|------|
-| `scripts/web_fetch_source.py` | 一键抓取：HTML → JS（并行+chunk递归）→ API端点 → Source Map → 报告 |
-| `scripts/auth_analyzer.py` | 鉴权深度分析：Cookie/CSRF/Token/签名/JWT/OAuth/WS鉴权 |
-| `scripts/gql_analyzer.py` | GraphQL分析：操作提取/Introspection/客户端配置 |
+| `scripts/web_fetch_source.py` | 一键抓取：HTML → JS → API端点提取 |
+| `scripts/auth_analyzer.py` | 鉴权深度分析：Cookie/CSRF/Token/签名 |
 
 **使用**：复制到项目 `temp-scripts/` 目录运行。
 
@@ -361,12 +282,9 @@ def sign_params(params: dict, secret: str) -> dict:
 
 | 场景 | 工具 |
 |------|------|
-| 获取原始 HTML / JS | Python `urllib.request` 脚本（`web_fetch_source.py`） |
+| 获取原始 HTML / JS | Python `urllib.request` 脚本 |
 | 搜索 JS 中的模式 | Python `re` 模块，写脚本批量处理 |
 | 发起 API 调用 | Python 脚本 或 `curl`（写成 `.ps1` 执行） |
-| GraphQL 分析 | `gql_analyzer.py` + Introspection |
 | 想用 web_fetch | ❌ 只用于获取人类可读内容，不用于源码获取 |
 
 所有脚本放在项目 `temp-scripts/` 目录，文件头部加中文注释。
-
----

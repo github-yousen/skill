@@ -14,11 +14,9 @@
 | 前端框架 | {FRAMEWORK} （Vue / React / Angular / Next.js / Nuxt.js） |
 | 打包工具 | {BUNDLER} （Vite / Webpack） |
 | 状态管理 | {STATE_MANAGEMENT} （Pinia / Vuex / Redux） |
-| 渲染方式 | {RENDER_MODE} （CSR / SSR / CSR+SPA） |
-| Source Map | {HAS_SOURCEMAP} （有 / 无，如有则可获取完整源码） |
-| Service Worker | {HAS_SW} （有 / 无） |
+| 渲染方式 | {RENDER_MODE} （CSR / SSR） |
+| Source Map | {HAS_SOURCEMAP} （有 / 无） |
 | 主 JS 文件 | {MAIN_JS_URL} |
-| JS 文件数 | {JS_COUNT} （含 chunk） |
 
 ---
 
@@ -37,9 +35,9 @@
 2. F12 → Application → Cookies → 找到对应域名
 3. 复制所需 Cookie 值
 
-**鉴权方式**：`{COOKIE / BEARER_TOKEN / API_KEY / OAUTH2}`
+**鉴权方式**：`{COOKIE / BEARER_TOKEN / API_KEY}`
 
-**签名机制**：`{参数签名 / HMAC-SHA256 / MD5 / WBI / 无}`
+**签名机制**：`{WBI / HMAC / 无}`
 
 ---
 
@@ -81,7 +79,7 @@ Referer: {TARGET_URL}
 
 ### 4.2 签名算法（如有）
 
-**类型**：`{SIGN_TYPE}` （参数签名 / HMAC-SHA256 / MD5 / WBI / 无）
+**类型**：`{SIGN_TYPE}` （WBI / HMAC-SHA256 / MD5 / 无）
 
 ```python
 # 签名算法代码（逆向后粘贴此处）
@@ -100,12 +98,6 @@ Referer: {TARGET_URL}
 步骤2: 用 {数据X} 做 {处理Y}
 步骤3: {接口B}（带 {处理Y} 的结果） → 完成操作
 ```
-
-### 4.4 WebSocket 鉴权（如有）
-
-| 端点 | 鉴权方式 | 说明 |
-|------|----------|------|
-| `{ws_url}` | URL参数传token | 连接时携带 `?token=xxx` |
 
 ---
 
@@ -126,20 +118,7 @@ Referer: {TARGET_URL}
 | 方法 | 路径 | 参数 | 说明 |
 |------|------|------|------|
 
-### 5.3 GraphQL（如有）
-
-| 操作类型 | 操作名 | 参数 | 说明 |
-|----------|--------|------|------|
-| query | `{operationName}` | `{variables}` | {描述} |
-| mutation | `{operationName}` | `{variables}` | {描述} |
-
-### 5.4 WebSocket（如有）
-
-| 端点 | 用途 | 鉴权 |
-|------|------|------|
-| `{ws_url}` | {描述} | {方式} |
-
-### 5.5 上报/监控（通常忽略）
+### 5.3 上报/监控（通常忽略）
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
@@ -169,29 +148,14 @@ Referer: {TARGET_URL}
 
 ### 7.2 JS 文件清单
 
-| 文件名 | 大小 | API数 | 用途 |
-|--------|------|-------|------|
-| `index-{hash}.js` | {size} | {count} | 主入口 |
+| 文件名 | 大小 | 用途 |
+|--------|------|------|
+| `index-{hash}.js` | {size} | 主入口 |
 
-### 7.3 Source Map 可用性
-
-| 文件 | 状态 | 说明 |
-|------|------|------|
-| `{map_file}` | 已下载 | 可还原完整源码 |
-
-### 7.4 未覆盖的功能
+### 7.3 未覆盖的功能
 
 - [ ] {功能1}（原因：需要特殊权限/未深入分析）
 - [ ] {功能2}
-
-### 7.5 分析环境与局限
-
-| 项目 | 说明 |
-|------|------|
-| 请求失败数 | {FAIL_COUNT} / {TOTAL} |
-| 被限流 | 是/否 |
-| 未获取的 JS | {列表} |
-| SPA 渲染内容 | 未获取（需浏览器自动化） |
 
 ---
 

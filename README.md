@@ -5,7 +5,7 @@ Personal public skill repository for reusable agent skills.
 ## Included skills
 
 - `cloudflare-ops`: Cloudflare operations skill covering Pages deployment, Workers deployment, KV-backed worker patterns, Pages project management, and reverse proxy scaffolding without storing credentials in the repository.
-- `web-reverse-engineer`: Website source reverse engineering skill for extracting raw HTML/JS, identifying APIs, auth flows, GraphQL usage, WebSocket endpoints, and producing reusable operation reports.
+- `web-reverse-engineer`: Website source reverse engineering skill, synchronized from the user's public GitHub repository, for extracting raw HTML/JS, identifying APIs, auth flows, GraphQL usage, WebSocket endpoints, and producing reusable operation reports.
 
 ## Repository layout
 
@@ -23,11 +23,9 @@ skills/
       proxy-patterns.md
   web-reverse-engineer/
     SKILL.md
-    main.py
-    api_executor.py
-    js_deobfuscator.py
-    site_analyzer.py
-    bilibili_deep_extract.py
+    SKILL_EN.md
+    README.md
+    LICENSE
     scripts/
       web_fetch_source.py
       auth_analyzer.py
