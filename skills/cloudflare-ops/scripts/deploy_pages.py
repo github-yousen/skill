@@ -46,7 +46,7 @@ def request_json(method: str, url: str, token: str, payload: dict | None = None)
     headers = {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
-        "User-Agent": "cloudflare-pages-deploy-skill",
+        "User-Agent": "cloudflare-ops-skill",
     }
     if payload is not None:
         data = json.dumps(payload).encode("utf-8")

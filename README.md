@@ -4,19 +4,25 @@ Personal public skill repository for reusable agent skills.
 
 ## Included skills
 
-- `cloudflare-pages-deploy`: Deploy or update static sites on Cloudflare Pages without storing secrets in the repository.
+- `cloudflare-ops`: Cloudflare operations skill covering Pages deployment, Workers deployment, KV-backed worker patterns, Pages project management, and reverse proxy scaffolding without storing credentials in the repository.
 
 ## Repository layout
 
 ```text
 skills/
-  cloudflare-pages-deploy/
+  cloudflare-ops/
     SKILL.md
     scripts/
       deploy_pages.py
+      deploy_worker.py
+      cloudflare_manager.py
+    references/
+      pages.md
+      workers.md
+      proxy-patterns.md
 ```
 
 ## Security
 
-This repository does **not** store Cloudflare API tokens or account credentials.
-Provide credentials at runtime or through your agent memory / environment only.
+This repository does **not** store Cloudflare API tokens, account IDs, emails, or other credentials.
+Provide credentials at runtime or through secure agent memory / environment only.
