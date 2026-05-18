@@ -5,14 +5,13 @@ description: |
   当用户提到"语雀"、"yuque"、"知识库文档"、"查看我的语雀"、"语雀文档"、"语雀知识库"、"yuque文档"、"语雀笔记"、"编辑语雀"、"更新语雀文档"时触发此技能。
   也适用于用户想查看、搜索、创建、编辑、删除语雀文档的任何场景，即使用户没有明确提到"语雀"但上下文暗示在操作语雀平台。
 ---
-
 # 语雀知识库操作技能
 
 通过语雀 Web API 实现知识库和文档的自动化操作，包括查看、搜索、创建、编辑、删除等功能。
 
 ## 前置条件
 
-使用前需要配置语雀凭证。请用户提供以下信息（通常通过浏览器开发者工具获取）：
+使用前需要配置语雀凭证。检查本文档所在目录是否存在credentials.json且包含以下信息（如不包含，请用户按照配置方式进行配置）：
 
 1. **Cookie** - 登录语雀后浏览器的完整 Cookie 字符串
 2. **CSRF Token** - 即 Cookie 中 `yuque_ctoken` 的值
@@ -20,15 +19,10 @@ description: |
 
 ### 凭证配置方式
 
-**方式一：环境变量**（推荐，临时使用）
-```bash
-export YUQUE_COOKIE="完整cookie字符串"
-export YUQUE_CSRF_TOKEN="yuque_ctoken值"
-export YUQUE_X_LOGIN="用户login"
-```
+**credentials.json 文件**（持久使用）
 
-**方式二：credentials.json 文件**（持久使用）
 在 skill 目录下创建 `credentials.json`：
+
 ```json
 {
   "cookie": "完整cookie字符串",
@@ -38,6 +32,7 @@ export YUQUE_X_LOGIN="用户login"
 ```
 
 **获取凭证步骤**：
+
 1. 浏览器登录 yuque.com
 2. F12 → Network → 刷新页面
 3. 找任意请求 → 复制 Request Headers 中的 Cookie 值
@@ -123,6 +118,7 @@ python {skill_dir}/scripts/yuque_client.py update-doc <doc_id> <book_id> [title]
 ```
 
 **长内容推荐用 `--body-file` 从文件读取**（避免命令行长度限制）：
+
 ```bash
 python {skill_dir}/scripts/yuque_client.py update-doc <doc_id> <book_id> "新标题" --body-file /path/to/body.html
 ```
@@ -210,6 +206,6 @@ python {skill_dir}/scripts/yuque_client.py get-doc-versions <doc_id>
 
 ## 脚本工具
 
-| 脚本 | 路径 | 用途 |
-|------|------|------|
+| 脚本            | 路径                        | 用途                                |
+| --------------- | --------------------------- | ----------------------------------- |
 | yuque_client.py | `scripts/yuque_client.py` | 语雀 API 命令行客户端，支持所有操作 |
